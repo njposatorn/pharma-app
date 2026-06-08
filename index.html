@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>รับยาเข้าคลัง</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- ZXing for barcode scanning -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.21.3/zxing.min.js"></script>
+<!-- SheetJS for Excel -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --blue:#1565C0;--blue-light:#E3F2FD;--blue-mid:#1976D2;
+  --green:#2E7D32;--green-light:#E8F5E9;
+  --warn:#E65100;--warn-light:#FFF3E0;
+  --danger:#C62828;--danger-light:#FFEBEE;
+  --bg:#F0F4F8;--card:#fff;--text:#1A237E;--muted:#607D8B;--border:#CFD8DC;
+}
+body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+
+/* ── Header ── */
+.hdr{background:linear-gradient(135deg,var(--blue) 0%,#0D47A1 100%);color:#fff;padding:18px 20px 14px;position:sticky;top:0;z-index:50;box-shadow:0 2px 12px rgba(21,101,192,.35);}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;}
+.hdr-title{font-size:20px;font-weight:800;letter-spacing:.3px;}
+.hdr-sub{font-size:11px;opacity:.7;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;}
+.hdr-badge{background:rgba(255,255,255,.2);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,.3);}
+.hdr-badge.ok{background:rgba(46,125,50,.5);border-color:rgba(46,125,50,.6);}
+
+/* ── Tabs ── */
+.tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:66px;z-index:40;}
+.tab{flex:1;padding:13px 6px;font-size:13px;font-weight:600;background:none;border:none;cursor:pointer;color:var(--muted);border-bottom:2.5px solid transparent;font-family:'Sarabun',sans-serif;transition:all .15s;}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+/* ── Pages ── */
+.content{padding:14px;max-width:560px;margin:0 auto;}
+.page{display:none;}.page.active{display:block;}
+
+/* ── Step indicator ── */
+.steps{display:flex;gap:6px;margin-bottom:16px;}
+.step{flex:1;height:4px;border-radius:2px;background:var(--border);transition:background .3s;}
+.step.done{background:var(--green);}
+.step.active{background:var(--blue);}
+
+/* ── Cards ── */
+.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.card-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.card-title span{width:20px;height:20px;background:var(--blue);color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;}
+
+/* ── DB Upload ── */
+.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;position:relative;}
+.upload-zone:active{border-color:var(--blue);background:var(--blue-light);}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.upload-icon{font-size:32px;margin-bottom:8px;}
+.upload-label{font-size:14px;font-weight:600;color:#444;}
+.upload-sub{font-size:12px;color:var(--muted);margin-top:4px;}
+.db-ok{background:var(--green-light);border:1.5px solid var(--green);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--green);}
+
+/* ── Barcode Scanner ── */
+.scan-btn{width:100%;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(21,101,192,.35);transition:background .15s;}
+.scan-btn:active{background:var(--blue-mid);}
+.scan-btn:disabled{opacity:.4;cursor:default;}
+.scan-video-wrap{position:relative;border-radius:12px;overflow:hidden;background:#000;margin-bottom:10px;display:none;}
+.scan-video-wrap.show{display:block;}
+#scan-video{width:100%;max-height:240px;object-fit:cover;display:block;}
+.scan-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;}
+.scan-frame{width:70%;height:50%;border:2.5px solid rgba(255,255,255,.8);border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.45);}
+.scan-line{position:absolute;width:65%;height:2px;background:linear-gradient(90deg,transparent,#00E5FF,transparent);animation:scanline 1.5s ease-in-out infinite;}
+@keyframes scanline{0%,100%{top:28%}50%{top:68%}}
+.scan-stop{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:20px;padding:6px 14px;font-size:13px;cursor:pointer;}
+
+/* ── Drug info card ── */
+.drug-found{background:var(--blue-light);border:1.5px solid var(--blue);border-radius:12px;padding:14px;margin-bottom:12px;}
+.drug-name{font-size:17px;font-weight:700;color:var(--blue);margin-bottom:6px;}
+.drug-meta{display:flex;gap:12px;font-size:13px;color:var(--muted);}
+.drug-meta span{background:#fff;padding:3px 10px;border-radius:8px;font-weight:500;}
+.drug-not-found{background:var(--warn-light);border:1.5px solid var(--warn);border-radius:12px;padding:12px;font-size:14px;color:var(--warn);font-weight:600;margin-bottom:12px;}
+
+/* ── Form fields ── */
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;}
+.field input{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 13px;font-size:15px;font-family:'Sarabun',sans-serif;outline:none;color:var(--text);background:#fff;-webkit-appearance:none;transition:border-color .15s;}
+.field input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(21,101,192,.1);}
+.field input.ai-filled{border-color:var(--green);background:var(--green-light);}
+.field input.manual{border-color:var(--blue);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+/* ── Camera / Preview ── */
+.cam-zone{border:2px dashed var(--border);border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;background:#fff;position:relative;overflow:hidden;transition:all .2s;}
+.cam-zone:active{border-color:var(--green);background:var(--green-light);}
+.cam-zone input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;}
+.cam-icon{font-size:36px;display:block;margin-bottom:8px;}
+.cam-label{font-size:15px;font-weight:700;color:#444;}
+.cam-sub{font-size:12px;color:var(--muted);margin-top:4px;}
+.preview-wrap{position:relative;margin-bottom:10px;border-radius:12px;overflow:hidden;}
+.preview-img{width:100%;max-height:200px;object-fit:contain;display:block;background:#000;}
+.preview-clear{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;}
+
+/* ── Scanning state ── */
+.scanning{display:none;align-items:center;gap:12px;background:var(--green-light);border-radius:12px;padding:14px;margin-bottom:12px;}
+.scanning.show{display:flex;}
+.spin{width:22px;height:22px;border:2.5px solid #a5d6a7;border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan-txt{font-size:14px;color:var(--green);font-weight:600;}
+
+/* ── Action buttons ── */
+.btn-save{width:100%;background:var(--green);color:#fff;border:none;border-radius:13px;padding:15px;font-size:16px;font-weight:800;cursor:pointer;font-family:'Sarabun',sans-serif;box-shadow:0 4px 16px rgba(46,125,50,.35);transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px;}
+.btn-save:active{background:var(--green);}
+.btn-save:disabled{opacity:.4;cursor:default;}
+.btn-reset{width:100%;background:none;border:1.5px solid var(--border);border-radius:12px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted);font-family:'Sarabun',sans-serif;margin-top:10px;}
+
+/* ── List ── */
+.list-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.list-count{font-size:14px;color:var(--muted);font-weight:500;}
+.btn-csv{background:var(--blue-light);color:var(--blue);border:1.5px solid var(--blue);border-radius:10px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;}
+.btn-csv:disabled{opacity:.35;cursor:default;}
+.entry{background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;border-left:4px solid var(--blue);box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.entry.exp-soon{border-left-color:var(--warn);}
+.entry.exp-expired{border-left-color:var(--danger);}
+.entry-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
+.entry-name{font-size:15px;font-weight:700;flex:1;padding-right:8px;color:var(--text);}
+.btn-del{background:none;border:none;color:#ccc;font-size:20px;cursor:pointer;line-height:1;}
+.entry-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;}
+.erow{font-size:13px;color:#555;}
+.erow em{font-size:11px;color:var(--muted);font-style:normal;display:block;}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:4px;}
+.badge.expired{background:var(--danger-light);color:var(--danger);}
+.badge.soon{background:var(--warn-light);color:var(--warn);}
+.entry-time{font-size:11px;color:#bbb;margin-top:8px;}
+.empty{text-align:center;padding:60px 20px;color:var(--muted);}
+.empty-icon{font-size:48px;display:block;margin-bottom:10px;}
+
+/* ── Settings ── */
+.settings-field{margin-bottom:16px;}
+.settings-field label{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;}
+.settings-field input{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 13px;font-size:14px;font-family:monospace;outline:none;-webkit-appearance:none;}
+.settings-field input:focus{border-color:var(--blue);}
+.btn-save-settings{width:100%;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif;}
+.info-box{background:var(--blue-light);border-radius:10px;padding:12px 14px;font-size:13px;color:#1565C0;line-height:1.7;margin-bottom:16px;}
+.info-box a{color:var(--blue);font-weight:700;}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:#1A237E;color:#fff;padding:11px 22px;border-radius:24px;font-size:14px;font-weight:600;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.25);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ── API banner ── */
+.api-warn{background:#FFF8E1;border-bottom:2px solid #FFC107;padding:10px 16px;font-size:13px;color:#795548;display:flex;align-items:center;gap:8px;}
+.api-warn.hidden{display:none;}
+.api-warn-btn{margin-left:auto;background:#FFC107;border:none;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div class="api-warn" id="api-warn">
+  <span>⚠️ ยังไม่ได้ตั้งค่า Gemini API Key</span>
+  <button class="api-warn-btn" onclick="switchTab('settings')">ตั้งค่าเลย</button>
+</div>
+
+<div class="hdr">
+  <div class="hdr-sub">ระบบจัดการคลังยา</div>
+  <div class="hdr-top">
+    <div class="hdr-title">💊 รับยาเข้าคลัง</div>
+    <div class="hdr-badge" id="db-badge" onclick="switchTab('settings')">ไม่มี DB</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('receive')">➕ รับเข้า</button>
+  <button class="tab" onclick="switchTab('list')">📋 รายการ (<span id="cnt">0</span>)</button>
+  <button class="tab" onclick="switchTab('settings')">⚙️ ตั้งค่า</button>
+</div>
+
+<div class="content">
+
+  <!-- ═══ RECEIVE PAGE ═══ -->
+  <div class="page active" id="page-receive">
+    <div class="steps">
+      <div class="step active" id="s1"></div>
+      <div class="step" id="s2"></div>
+      <div class="step" id="s3"></div>
+      <div class="step" id="s4"></div>
+    </div>
+
+    <!-- Step 1: Scan barcode -->
+    <div class="card" id="card-scan">
+      <div class="card-title"><span>1</span> สแกน Barcode</div>
+
+      <div id="barcode-cam-wrap">
+        <div class="cam-zone" style="margin-bottom:10px;">
+          <input type="file" accept="image/*" capture="environment" id="barcode-input" onchange="handleBarcodePhoto(event)">
+          <span class="cam-icon">📷</span>
+          <div class="cam-label">ถ่ายรูป Barcode</div>
+          <div class="cam-sub">AI จะอ่านเลข Barcode ให้อัตโนมัติ</div>
+        </div>
+      </div>
+
+      <div class="preview-wrap" id="barcode-preview-wrap" style="display:none">
+        <img class="preview-img" id="barcode-preview-img" alt="">
+        <button class="preview-clear" onclick="clearBarcodePhoto()">✕ ถ่ายใหม่</button>
+      </div>
+
+      <div class="scanning" id="barcode-scanning">
+        <div class="spin"></div>
+        <div class="scan-txt">AI กำลังอ่าน Barcode...</div>
+      </div>
+
+      <div class="field" style="margin-top:10px;margin-bottom:0">
+        <label>หรือพิมพ์ Barcode เอง</label>
+        <input type="text" id="manual-barcode" placeholder="พิมพ์ barcode แล้วกด Enter" onkeydown="if(event.key==='Enter')lookupBarcode(this.value)" inputmode="numeric">
+      </div>
+    </div>
+
+    <!-- Drug found -->
+    <div id="drug-result" style="display:none"></div>
+
+    <!-- Step 2: Qty + Price -->
+    <div class="card" id="card-qty" style="display:none">
+      <div class="card-title"><span>2</span> จำนวนและราคา</div>
+      <div class="grid2">
+        <div class="field">
+          <label>จำนวนที่รับเข้า *</label>
+          <input type="number" id="f-qty" placeholder="0" min="1" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label>ราคาที่ซื้อมา (บาท) *</label>
+          <input type="number" id="f-price" placeholder="0.00" min="0" step="0.01" inputmode="decimal">
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Photo -->
+    <div class="card" id="card-photo" style="display:none">
+      <div class="card-title"><span>3</span> ถ่ายรูปฉลาก → อ่าน LOT/MFD/EXP</div>
+      <div id="cam-zone-wrap">
+        <div class="cam-zone">
+          <input type="file" accept="image/*" capture="environment" id="photo-input" onchange="handlePhoto(event)">
+          <span class="cam-icon">📸</span>
+          <div class="cam-label">ถ่ายรูปหรืออัปโหลดฉลากยา</div>
+          <div class="cam-sub">AI จะอ่าน LOT · MFD · EXP ให้อัตโนมัติ</div>
+        </div>
+      </div>
+      <div class="preview-wrap" id="preview-wrap" style="display:none">
+        <img class="preview-img" id="preview-img" alt="">
+        <button class="preview-clear" onclick="clearPhoto()">✕ ถ่ายใหม่</button>
+      </div>
+      <div class="scanning" id="scanning">
+        <div class="spin"></div>
+        <div class="scan-txt">AI กำลังอ่านข้อมูลจากรูป...</div>
+      </div>
+    </div>
+
+    <!-- Step 4: LOT MFD EXP -->
+    <div class="card" id="card-lot" style="display:none">
+      <div class="card-title"><span>4</span> LOT / MFD / EXP</div>
+      <div class="field">
+        <label>LOT Number</label>
+        <input type="text" id="f-lot" placeholder="เช่น AB12345">
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>MFD (วันผลิต)</label>
+          <input type="text" id="f-mfd" placeholder="DD/MM/YYYY">
+        </div>
+        <div class="field">
+          <label>EXP (หมดอายุ)</label>
+          <input type="text" id="f-exp" placeholder="DD/MM/YYYY">
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:-6px;margin-bottom:12px;">
+        * ปีเป็น ค.ศ. เท่านั้น · ถ้าไม่มีวัน MFD=01, EXP=วันสุดท้ายของเดือน
+      </div>
+      <button class="btn-save" onclick="saveEntry()">✓ บันทึกรายการ</button>
+      <button class="btn-reset" onclick="resetForm()">🔄 เริ่มรายการใหม่</button>
+    </div>
+  </div>
+
+  <!-- ═══ LIST PAGE ═══ -->
+  <div class="page" id="page-list">
+    <div class="list-top">
+      <span class="list-count" id="list-count-text">0 รายการ</span>
+      <button class="btn-csv" id="btn-csv" onclick="exportCSV()" disabled>⬇️ CSV</button>
+    </div>
+    <div id="entries-list">
+      <div class="empty"><span class="empty-icon">📦</span><div style="font-size:15px;font-weight:600">ยังไม่มีรายการ</div><div style="font-size:13px;margin-top:4px">กดแท็บ "รับเข้า" เพื่อเริ่มบันทึก</div></div>
+    </div>
+  </div>
+
+  <!-- ═══ SETTINGS PAGE ═══ -->
+  <div class="page" id="page-settings">
+    <div class="card">
+      <div class="card-title">📂 ฐานข้อมูลยา (Excel/CSV)</div>
+      <div id="db-status-card">
+        <div class="upload-zone">
+          <input type="file" accept=".xlsx,.xls,.csv" onchange="loadDB(event)">
+          <div class="upload-icon">📊</div>
+          <div class="upload-label">อัปโหลดไฟล์ Excel หรือ CSV</div>
+          <div class="upload-sub">คอลัมน์: Barcode · ชื่อยา · หน่วย · เทียบบรรจุ</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🔑 Gemini API Key</div>
+      <div class="info-box">
+        สมัครฟรีที่ <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a><br>
+        → Get API Key → Create API Key<br>
+        ฟรี 1,500 requests/วัน · ไม่ต้องใส่บัตรเครดิต<br>
+        <strong>API Key เก็บในเครื่องคุณเท่านั้น</strong>
+      </div>
+      <div class="settings-field">
+        <label>Gemini API Key</label>
+        <input type="password" id="gemini-key-input" placeholder="AIzaSy...">
+      </div>
+      <button class="btn-save-settings" onclick="saveGeminiKey()">💾 บันทึก API Key</button>
+    </div>
+  </div>
+
+</div><!-- end content -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──
+let drugDB = [];
+let entries = JSON.parse(localStorage.getItem('rx_entries') || '[]');
+let geminiKey = localStorage.getItem('rx_gemini_key') || '';
+let currentDrug = null;
+let scanStream = null;
+let codeReader = null;
+
+// ── Init ──
+if (geminiKey) document.getElementById('api-warn').classList.add('hidden');
+renderList();
+updateDBBadge();
+if (geminiKey) document.getElementById('gemini-key-input').value = geminiKey;
+
+// ── Tabs ──
+function switchTab(t) {
+  ['receive','list','settings'].forEach(id => {
+    document.getElementById('page-'+id).classList.toggle('active', id===t);
+  });
+  document.querySelectorAll('.tab').forEach((el,i) => {
+    el.classList.toggle('active', ['receive','list','settings'][i]===t);
+  });
+  // tab switched
+}
+
+// ── DB Load ──
+function loadDB(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      drugDB = rows.map(r => {
+        const keys = Object.keys(r);
+        return {
+          barcode: String(r[keys[0]] || '').trim(),
+          name: String(r[keys[1]] || '').trim(),
+          unit: String(r[keys[2]] || '').trim(),
+          pack: String(r[keys[3]] || '').trim(),
+        };
+      }).filter(r => r.barcode);
+      localStorage.setItem('rx_db', JSON.stringify(drugDB));
+      updateDBBadge();
+      showToast('✓ โหลดฐานข้อมูล ' + drugDB.length + ' รายการ');
+      renderDBStatus();
+    } catch(err) {
+      showToast('โหลดไฟล์ไม่ได้: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function updateDBBadge() {
+  const saved = localStorage.getItem('rx_db');
+  if (saved) {
+    try { drugDB = JSON.parse(saved); } catch {}
+  }
+  const badge = document.getElementById('db-badge');
+  if (drugDB.length > 0) {
+    badge.textContent = '📊 DB ' + drugDB.length;
+    badge.classList.add('ok');
+  } else {
+    badge.textContent = 'ไม่มี DB';
+    badge.classList.remove('ok');
+  }
+}
+
+function renderDBStatus() {
+  const el = document.getElementById('db-status-card');
+  if (drugDB.length > 0) {
+    el.innerHTML = `<div class="db-ok">✅ โหลดแล้ว ${drugDB.length} รายการ <button onclick="clearDB()" style="margin-left:auto;background:none;border:1px solid var(--green);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--green)">เปลี่ยนไฟล์</button></div>`;
+  }
+}
+
+function clearDB() {
+  drugDB = [];
+  localStorage.removeItem('rx_db');
+  updateDBBadge();
+  document.getElementById('db-status-card').innerHTML = `<div class="upload-zone"><input type="file" accept=".xlsx,.xls,.csv" onchange="loadDB(event)"><div class="upload-icon">📊</div><div class="upload-label">อัปโหลดไฟล์ Excel หรือ CSV</div><div class="upload-sub">คอลัมน์: Barcode · ชื่อยา · หน่วย · เทียบบรรจุ</div></div>`;
+}
+
+// ── Gemini Key ──
+function saveGeminiKey() {
+  const k = document.getElementById('gemini-key-input').value.trim();
+  if (!k || k.length < 10) { showToast('กรุณาวาง API Key ให้ครบ'); return; }
+  geminiKey = k;
+  localStorage.setItem('rx_gemini_key', k);
+  document.getElementById('api-warn').classList.add('hidden');
+  showToast('✓ บันทึก Gemini API Key แล้ว');
+}
+
+// ── Barcode Photo ──
+function handleBarcodePhoto(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const src = ev.target.result;
+    document.getElementById('barcode-preview-img').src = src;
+    document.getElementById('barcode-preview-wrap').style.display = 'block';
+    document.getElementById('barcode-cam-wrap').style.display = 'none';
+    const base64 = src.split(',')[1];
+    await readBarcodeWithGemini(base64);
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearBarcodePhoto() {
+  document.getElementById('barcode-preview-wrap').style.display = 'none';
+  document.getElementById('barcode-cam-wrap').style.display = 'block';
+  document.getElementById('barcode-input').value = '';
+  document.getElementById('manual-barcode').value = '';
+}
+
+async function readBarcodeWithGemini(base64) {
+  if (!geminiKey) { showToast('ตั้งค่า Gemini API Key ก่อนครับ'); return; }
+  document.getElementById('barcode-scanning').classList.add('show');
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+              { text: 'อ่านเลข Barcode หรือ QR Code จากรูปนี้ ตอบเฉพาะตัวเลข/ตัวอักษรของ barcode เท่านั้น ไม่มีข้อความอื่น ไม่มี space' }
+            ]
+          }]
+        })
+      }
+    );
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message);
+    const barcode = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().replace(/\s/g,'');
+    if (barcode) {
+      document.getElementById('manual-barcode').value = barcode;
+      lookupBarcode(barcode);
+    } else {
+      showToast('อ่าน Barcode ไม่ได้ กรุณาพิมพ์เอง');
+    }
+  } catch(err) {
+    showToast('อ่านไม่ได้: ' + (err.message||'กรุณาพิมพ์เอง'));
+  }
+  document.getElementById('barcode-scanning').classList.remove('show');
+}
+
+function stopScan() {}
+
+function lookupBarcode(barcode) {
+  if (!barcode) return;
+  document.getElementById('manual-barcode').value = barcode;
+  const drug = drugDB.find(d => d.barcode === barcode.trim());
+  const resultEl = document.getElementById('drug-result');
+  if (drug) {
+    currentDrug = drug;
+    resultEl.innerHTML = `<div class="drug-found">
+      <div class="drug-name">💊 ${drug.name}</div>
+      <div class="drug-meta">
+        <span>📦 ${drug.unit}</span>
+        <span>🔢 บรรจุ ${drug.pack}</span>
+        <span style="font-family:monospace;font-size:12px">${barcode}</span>
+      </div>
+    </div>`;
+    resultEl.style.display = 'block';
+    document.getElementById('card-qty').style.display = 'block';
+    document.getElementById('card-photo').style.display = 'block';
+    document.getElementById('card-lot').style.display = 'block';
+    updateSteps(2);
+    showToast('✓ พบ: ' + drug.name);
+  } else if (drugDB.length > 0) {
+    currentDrug = { barcode, name: '', unit: '', pack: '' };
+    resultEl.innerHTML = `<div class="drug-not-found">⚠️ ไม่พบ Barcode: ${barcode} ในฐานข้อมูล<br><small style="font-weight:400">กรอกข้อมูลเองได้ด้านล่าง</small></div>`;
+    resultEl.style.display = 'block';
+    document.getElementById('card-qty').style.display = 'block';
+    document.getElementById('card-photo').style.display = 'block';
+    document.getElementById('card-lot').style.display = 'block';
+    updateSteps(2);
+  } else {
+    // No DB loaded, still proceed
+    currentDrug = { barcode, name: barcode, unit: '', pack: '' };
+    resultEl.innerHTML = `<div class="drug-not-found">⚠️ ยังไม่มีฐานข้อมูลยา กรุณาอัปโหลด Excel ใน ตั้งค่า</div>`;
+    resultEl.style.display = 'block';
+    document.getElementById('card-qty').style.display = 'block';
+    document.getElementById('card-photo').style.display = 'block';
+    document.getElementById('card-lot').style.display = 'block';
+    updateSteps(2);
+  }
+}
+
+function updateSteps(active) {
+  for (let i=1; i<=4; i++) {
+    const el = document.getElementById('s'+i);
+    el.className = 'step' + (i < active ? ' done' : i === active ? ' active' : '');
+  }
+}
+
+// ── Photo / OCR ──
+function handlePhoto(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const src = ev.target.result;
+    document.getElementById('preview-img').src = src;
+    document.getElementById('preview-wrap').style.display = 'block';
+    document.getElementById('cam-zone-wrap').style.display = 'none';
+    const base64 = src.split(',')[1];
+    updateSteps(3);
+    await scanWithGemini(base64);
+    updateSteps(4);
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearPhoto() {
+  document.getElementById('preview-wrap').style.display = 'none';
+  document.getElementById('cam-zone-wrap').style.display = 'block';
+  document.getElementById('photo-input').value = '';
+  ['f-lot','f-mfd','f-exp'].forEach(id => {
+    document.getElementById(id).value = '';
+    document.getElementById(id).classList.remove('ai-filled');
+  });
+}
+
+async function scanWithGemini(base64) {
+  if (!geminiKey) { showToast('ตั้งค่า Gemini API Key ก่อนครับ'); return; }
+  document.getElementById('scanning').classList.add('show');
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+              { text: `วิเคราะห์ฉลากยา/เวชภัณฑ์นี้ ตอบเป็น JSON เท่านั้น ไม่มี markdown backtick ไม่มีข้อความอื่น:
+{"lot":"Lot หรือ L/C หรือ Batch number (ถ้าไม่พบใส่ '')","mfd":"วันผลิต","exp":"วันหมดอายุ"}
+
+กฎการแปลงวันที่:
+- รูปแบบ DD/MM/YYYY → ใช้ตามนั้น
+- รูปแบบ MM/YYYY → MFD ใช้ 01/MM/YYYY, EXP ใช้วันสุดท้ายของเดือนนั้น
+- ปี พ.ศ. → แปลงเป็น ค.ศ. (ลบ 543) เช่น 2567 → 2024
+- ผลลัพธ์ต้องเป็น DD/MM/YYYY ค.ศ. เท่านั้น` }
+            ]
+          }]
+        })
+      }
+    );
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    let p = {};
+    try { p = JSON.parse(text.replace(/```json|```/g,'').trim()); } catch {}
+    if (p.lot) { setField('f-lot', p.lot); }
+    if (p.mfd) { setField('f-mfd', p.mfd); }
+    if (p.exp) { setField('f-exp', p.exp); }
+    showToast('✓ อ่านข้อมูลจากรูปสำเร็จ');
+  } catch(err) {
+    showToast('อ่านไม่ได้: ' + (err.message||'กรุณากรอกเอง'));
+    console.error(err);
+  }
+  document.getElementById('scanning').classList.remove('show');
+}
+
+function setField(id, val) {
+  const el = document.getElementById(id);
+  el.value = val;
+  el.classList.add('ai-filled');
+}
+
+// ── Save entry ──
+function saveEntry() {
+  const qty = document.getElementById('f-qty').value.trim();
+  const price = document.getElementById('f-price').value.trim();
+  if (!qty || !price) { showToast('กรุณากรอกจำนวนและราคา'); return; }
+  if (!currentDrug) { showToast('กรุณาสแกน Barcode ก่อน'); return; }
+  const now = new Date();
+  const time = now.toLocaleDateString('th-TH') + ' ' + now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  entries.push({
+    id: Date.now(),
+    barcode: currentDrug.barcode || '',
+    name: currentDrug.name || '',
+    unit: currentDrug.unit || '',
+    pack: currentDrug.pack || '',
+    qty,
+    price,
+    lot: document.getElementById('f-lot').value.trim(),
+    mfd: document.getElementById('f-mfd').value.trim(),
+    exp: document.getElementById('f-exp').value.trim(),
+    time
+  });
+  localStorage.setItem('rx_entries', JSON.stringify(entries));
+  renderList();
+  showToast('✓ บันทึกรายการสำเร็จ');
+  resetForm();
+  switchTab('list');
+}
+
+function resetForm() {
+  currentDrug = null;
+  document.getElementById('manual-barcode').value = '';
+  document.getElementById('drug-result').style.display = 'none';
+  document.getElementById('drug-result').innerHTML = '';
+  ['card-qty','card-photo','card-lot'].forEach(id => document.getElementById(id).style.display = 'none');
+  ['f-qty','f-price','f-lot','f-mfd','f-exp'].forEach(id => {
+    document.getElementById(id).value = '';
+    document.getElementById(id).classList.remove('ai-filled','manual');
+  });
+  clearPhoto();
+  updateSteps(1);
+  window.scrollTo(0,0);
+}
+
+// ── Render list ──
+function expStatus(expStr) {
+  if (!expStr) return null;
+  const p = expStr.split('/');
+  let d;
+  if (p.length===3) d = new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0]));
+  else if (p.length===2) d = new Date(parseInt(p[1]), parseInt(p[0])-1, 1);
+  else return null;
+  const diff = (d - new Date()) / (1000*60*60*24*30);
+  if (diff < 0) return 'expired';
+  if (diff < 3) return 'soon';
+  return 'ok';
+}
+
+function renderList() {
+  const n = entries.length;
+  document.getElementById('cnt').textContent = n;
+  document.getElementById('list-count-text').textContent = n + ' รายการ';
+  document.getElementById('btn-csv').disabled = n === 0;
+  const el = document.getElementById('entries-list');
+  if (n === 0) {
+    el.innerHTML = '<div class="empty"><span class="empty-icon">📦</span><div style="font-size:15px;font-weight:600">ยังไม่มีรายการ</div><div style="font-size:13px;margin-top:4px">กดแท็บ "รับเข้า" เพื่อเริ่มบันทึก</div></div>';
+    return;
+  }
+  el.innerHTML = [...entries].reverse().map(e => {
+    const st = expStatus(e.exp);
+    const badge = st==='expired' ? '<span class="badge expired">หมดอายุ</span>' : st==='soon' ? '<span class="badge soon">ใกล้หมด</span>' : '';
+    return `<div class="entry ${st==='expired'?'exp-expired':st==='soon'?'exp-soon':''}">
+      <div class="entry-head">
+        <div class="entry-name">${e.name||e.barcode}</div>
+        <button class="btn-del" onclick="delEntry(${e.id})">✕</button>
+      </div>
+      <div class="entry-grid">
+        ${e.unit?`<div class="erow"><em>หน่วย</em>${e.unit}</div>`:''}
+        ${e.pack?`<div class="erow"><em>เทียบบรรจุ</em>${e.pack}</div>`:''}
+        <div class="erow"><em>จำนวน</em>${e.qty}</div>
+        <div class="erow"><em>ราคา</em>฿${Number(e.price).toLocaleString()}</div>
+        ${e.lot?`<div class="erow"><em>LOT</em>${e.lot}</div>`:''}
+        ${e.mfd?`<div class="erow"><em>MFD</em>${e.mfd}</div>`:''}
+        ${e.exp?`<div class="erow"><em>EXP</em>${e.exp}${badge}</div>`:''}
+      </div>
+      <div class="entry-time">${e.time} · ${e.barcode}</div>
+    </div>`;
+  }).join('');
+}
+
+function delEntry(id) {
+  entries = entries.filter(e => e.id !== id);
+  localStorage.setItem('rx_entries', JSON.stringify(entries));
+  renderList();
+}
+
+// ── Export CSV ──
+function exportCSV() {
+  const header = ['Barcode','ชื่อยา','หน่วย','เทียบบรรจุ','จำนวน','ราคา','LOT','MFD','EXP','เวลาบันทึก'];
+  const rows = entries.map(e => [e.barcode,e.name,e.unit,e.pack,e.qty,e.price,e.lot,e.mfd,e.exp,e.time]);
+  const csv = '\uFEFF' + [header,...rows].map(r => r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  a.href = url;
+  a.download = `รับยาเข้า_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('✓ ดาวน์โหลด CSV สำเร็จ');
+}
+
+// ── Toast ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2800);
+}
+
+// ── Restore DB if saved ──
+renderDBStatus();
+</script>
+</body>
+</html>
